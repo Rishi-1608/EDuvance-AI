@@ -1,0 +1,486 @@
+.notes-layout-container {
+  display: flex;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+.notes-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: transparent;
+  position: relative;
+}
+
+.notes-sidebar {
+  width: 340px;
+  min-width: 340px;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--glass-border);
+  background: rgba(0, 0, 0, 0.15);
+  backdrop-filter: var(--blur-glass);
+}
+
+
+
+.sidebar-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.sidebar-scroll::-webkit-scrollbar {
+  width: 3px;
+}
+
+.sidebar-scroll::-webkit-scrollbar-thumb {
+  background: var(--glass-border);
+  border-radius: 10px;
+}
+
+.sidebar-title {
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--glass-border);
+  font-weight: 700;
+}
+
+.sidebar-item {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 9px 12px;
+  border-radius: 12px;
+  background: transparent;
+  border: 1px solid transparent;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.2s ease;
+  margin-bottom: 2px;
+}
+
+.sidebar-item:hover {
+  background: var(--item-hover);
+  border-color: var(--glass-border);
+}
+
+.sidebar-item.active {
+  background: linear-gradient(135deg,
+      color-mix(in srgb, var(--accent-primary) 8%, transparent),
+      color-mix(in srgb, var(--accent-primary) 3%, transparent));
+  border-color: color-mix(in srgb, var(--accent-primary) 25%, transparent);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--accent-primary) 8%, transparent) inset,
+    0 4px 12px rgba(0, 0, 0, 0.04);
+}
+
+.sidebar-item.block-active {
+  background: linear-gradient(90deg, rgba(var(--accent-primary-rgb), 0.12) 0%, transparent 100%);
+  border-color: rgba(var(--accent-primary-rgb), 0.3);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.notes-content-area {
+  scroll-behavior: smooth;
+}
+
+.notes-viewer-container {
+  width: 100%;
+}
+
+.notes-floating-action {
+  animation: slideBottomUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes slideBottomUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+
+.sidebar-item-name {
+  font-size: 0.78rem;
+  color: var(--text-primary);
+  word-break: break-all;
+  font-family: var(--font-display);
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.sidebar-item-meta {
+  font-size: 0.58rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 600;
+}
+
+.sidebar-item.active .sidebar-item-meta {
+  color: var(--accent-primary);
+}
+
+.sidebar-item.active .sidebar-item-name {
+  color: var(--text-primary);
+}
+
+/* ═══════════════════════════════════════════════════════
+   NOTES PANEL — Main reading area
+   ═══════════════════════════════════════════════════════ */
+.notes-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Search UI Enhancements ── */
+.search-input-field {
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.05);
+}
+
+.search-input-field:focus {
+  box-shadow: 0 0 0 3px rgba(var(--accent-primary-rgb), 0.1),
+    0 8px 16px rgba(0, 0, 0, 0.2);
+}
+
+[data-theme="light"] .search-input-field {
+  background: rgba(0, 0, 0, 0.03);
+  border-color: rgba(0, 0, 0, 0.08);
+  color: #0f172a;
+}
+
+[data-theme="light"] .search-input-field::placeholder {
+  color: rgba(15, 23, 42, 0.3);
+}
+
+[data-theme="light"] .search-input-field:focus {
+  background: #ffffff;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px rgba(var(--accent-primary-rgb), 0.1);
+}
+
+
+
+.notes-panel::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 10%;
+  right: 10%;
+  height: 1px;
+  background: linear-gradient(90deg,
+      transparent,
+      color-mix(in srgb, var(--accent-primary) 12%, transparent),
+      transparent);
+  z-index: 1;
+}
+
+/* ── Toolbar ── */
+.notes-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 18px;
+  border-bottom: 1px solid var(--glass-border);
+  flex-shrink: 0;
+}
+
+.search-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  max-width: 280px;
+  padding: 4px 10px;
+  border-radius: 10px;
+  background: var(--item-hover);
+  border: 1px solid var(--glass-border);
+  transition: border-color 0.2s ease;
+}
+
+.search-wrap:focus-within {
+  border-color: color-mix(in srgb, var(--accent-primary) 30%, transparent);
+}
+
+.search-input {
+  flex: 1;
+  background: none;
+  border: none;
+  outline: none;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  min-width: 0;
+  font-weight: 400;
+}
+
+.search-input::placeholder {
+  color: var(--text-muted);
+}
+
+/* ═══════════════════════════════════════════════════════
+   MARKDOWN VIEWER — Optimized Typography
+   ═══════════════════════════════════════════════════════ */
+.markdown-viewer {
+  padding: 28px 36px 40px;
+  color: var(--text-secondary);
+  font-family: var(--font-body), 'Inter', system-ui, sans-serif;
+  font-size: 0.88rem;
+  line-height: 1.75;
+  flex: 1;
+  overflow-y: auto;
+  scroll-behavior: smooth;
+  letter-spacing: 0.005em;
+}
+
+/* Custom scrollbar for the reader */
+.markdown-viewer::-webkit-scrollbar {
+  width: 5px;
+}
+
+.markdown-viewer::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.markdown-viewer::-webkit-scrollbar-thumb {
+  background: var(--glass-border);
+  border-radius: 10px;
+}
+
+.markdown-viewer::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--accent-primary) 30%, transparent);
+}
+
+/* ── Headings ── */
+.markdown-viewer h1 {
+  font-family: var(--font-display);
+  font-size: 1.55rem;
+  color: var(--text-primary);
+  margin: 0 0 20px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--glass-border);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.2;
+}
+
+.markdown-viewer h2 {
+  font-family: var(--font-display);
+  font-size: 1.2rem;
+  color: var(--text-primary);
+  margin: 28px 0 12px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+  padding-bottom: 6px;
+  border-bottom: 1px solid color-mix(in srgb, var(--glass-border) 50%, transparent);
+}
+
+.markdown-viewer h3 {
+  font-family: var(--font-display);
+  font-size: 1rem;
+  color: var(--accent-primary);
+  margin: 22px 0 8px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+/* ── Body text ── */
+.markdown-viewer p {
+  margin-bottom: 14px;
+}
+
+.markdown-viewer li {
+  margin-bottom: 5px;
+  padding-left: 4px;
+  position: relative;
+}
+
+.markdown-viewer ul {
+  padding-left: 18px;
+  margin-bottom: 14px;
+}
+
+.markdown-viewer ol {
+  padding-left: 18px;
+  margin-bottom: 14px;
+}
+
+/* ── Inline styles ── */
+.markdown-viewer strong {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.markdown-viewer em {
+  color: color-mix(in srgb, var(--accent-primary) 70%, var(--text-secondary));
+  font-style: italic;
+}
+
+.markdown-viewer code {
+  font-family: var(--font-mono);
+  font-size: 0.82em;
+  background: var(--item-hover);
+  border: 1px solid var(--glass-border);
+  padding: 1px 6px;
+  border-radius: 5px;
+  color: var(--accent-primary);
+}
+
+.markdown-viewer hr {
+  height: 1px;
+  border: none;
+  background: linear-gradient(90deg,
+      transparent,
+      var(--glass-border),
+      transparent);
+  margin: 28px 0;
+}
+
+/* ── Blockquotes ── */
+.markdown-viewer blockquote {
+  border-left: 3px solid var(--accent-primary);
+  margin: 16px 0;
+  padding: 10px 16px;
+  background: color-mix(in srgb, var(--accent-primary) 4%, transparent);
+  border-radius: 0 10px 10px 0;
+  font-style: italic;
+  color: var(--text-secondary);
+}
+
+/* ═══════════════════════════════════════════════════════
+   ERROR / EMPTY / MESSAGES
+   ═══════════════════════════════════════════════════════ */
+.notes-error {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 18px;
+  color: var(--error);
+  font-size: 0.82rem;
+}
+
+.empty-state {
+  border-radius: 18px;
+  padding: 48px 32px;
+  text-align: center;
+  max-width: 380px;
+  margin: 0 auto;
+}
+
+.notes-gen-msg {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  border-radius: 12px;
+  background: rgba(59, 130, 246, 0.06);
+  border: 1px solid rgba(59, 130, 246, 0.15);
+  color: var(--info);
+  font-size: 0.78rem;
+  margin-bottom: 10px;
+  flex-shrink: 0;
+  animation: fadeUp 0.25s ease both;
+}
+
+.notes-gen-msg.error {
+  background: rgba(239, 68, 68, 0.06);
+  border-color: rgba(239, 68, 68, 0.15);
+  color: var(--error);
+}
+
+/* ═══════════════════════════════════════════════════════
+   RESPONSIVE
+   ═══════════════════════════════════════════════════════ */
+@media (max-width: 900px) {
+  .notes-layout-container {
+    flex-direction: column-reverse;
+  }
+
+  .notes-sidebar {
+    width: 100%;
+    min-width: 100%;
+    height: 300px;
+    border-left: none;
+    border-bottom: 1px solid var(--glass-border);
+  }
+}
+
+/* ── Light Theme Overrides ── */
+[data-theme="light"] .notes-layout-container {
+  background: transparent;
+}
+
+[data-theme="light"] .notes-sidebar {
+  background: #ffffff;
+  border-left-color: rgba(0, 0, 0, 0.1);
+}
+
+[data-theme="light"] .notes-top-bar {
+  border-bottom-color: rgba(0, 0, 0, 0.08);
+}
+
+[data-theme="light"] .sidebar-item {
+  background: #ffffff;
+  border-color: rgba(0, 0, 0, 0.05);
+}
+
+[data-theme="light"] .sidebar-item.block-active {
+  background: linear-gradient(90deg, rgba(var(--accent-primary-rgb), 0.05) 0%, transparent 100%);
+}
+
+[data-theme="light"] .markdown-viewer {
+  background: #ffffff;
+  color: #334155;
+}
+
+[data-theme="light"] .markdown-viewer h1,
+[data-theme="light"] .markdown-viewer h2 {
+  color: #0f172a;
+}
+
+[data-theme="light"] .markdown-viewer code {
+  background: #f1f5f9;
+}
+
+[data-theme="light"] .notes-floating-toolbar {
+  background: #ffffff;
+  border-color: rgba(0, 0, 0, 0.1);
+}
+
+[data-theme="light"] .notes-floating-toolbar input {
+  color: #0f172a;
+}
+
+[data-theme="light"] .text-white {
+  color: #0f172a;
+}
+
+[data-theme="light"] .text-muted {
+  color: #64748b;
+}
+
+[data-theme="light"] .text-secondary {
+  color: #475569;
+}
+
+[data-theme="light"] .bg-black\/20 {
+  background-color: rgba(0, 0, 0, 0.03);
+}
