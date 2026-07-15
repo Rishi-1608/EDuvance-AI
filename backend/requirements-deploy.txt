@@ -1,0 +1,75 @@
+# ─────────────────────────────────────────────────────────────────────────────
+#  EduVance AI — Deployment Requirements (CPU / HF Inference API mode)
+#  Use this instead of requirements.txt when deploying with PHI3_BACKEND=api.
+#  Excludes transformers/accelerate/bitsandbytes — only needed by the local
+#  GPU Phi-3 engine (phi3_engine.py), which isn't imported in API mode.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Web framework
+fastapi>=0.110.0
+uvicorn[standard]>=0.29.0
+python-multipart>=0.0.9
+
+# Auth
+python-jose[cryptography]>=3.3.0
+bcrypt>=4.1.2
+python-dotenv>=1.0.1
+
+# Database
+sqlalchemy>=2.0.0
+psycopg2-binary>=2.9.9
+
+# Object storage (works against real MinIO or any S3-compatible provider,
+# e.g. Cloudflare R2 — see minio_utils.py)
+minio>=7.2.0
+
+# Computer vision / frame extraction
+opencv-python-headless>=4.9.0    # headless: no GUI libs needed on a server
+
+# OCR — runs on CPU (EASYOCR_GPU=false)
+easyocr>=1.7.1
+certifi>=2024.2.2                # avoids SSL errors on EasyOCR model downloads
+
+# Speech transcription — CPU-friendly backends
+faster-whisper>=1.0.0            # primary backend, INT8 on CPU
+openai-whisper>=20231117         # fallback backend
+soundfile>=0.12.1
+
+# Phi-3 via Hugging Face Inference API (phi3_engine_api.py)
+huggingface_hub>=0.23.0
+
+# torch — required by easyocr / faster-whisper / sentence-transformers,
+# even though the local Phi-3 GPU path is not used in API mode.
+# NOTE: torch is installed separately in the Dockerfile from the CPU-only
+# wheel index (https://download.pytorch.org/whl/cpu) — a plain `torch` pip
+# install here would pull the ~2GB CUDA build, which is unnecessary and
+# much bigger than needed for a CPU-only deployment. Do not add torch to
+# this file directly.
+
+# Document processing (used by academic_system pipeline)
+PyPDF2>=3.0.0
+pdfplumber>=0.10.0
+python-docx>=1.1.0
+python-pptx>=0.6.23
+PyMuPDF>=1.24.0                  # imported as `fitz`
+Pillow>=10.0.0
+
+# Knowledge graph / dedup
+networkx>=3.2
+scikit-learn>=1.4.0
+scikit-image>=0.22.0
+sentence-transformers>=2.5.0
+
+# PDF report generation
+reportlab>=4.1.0
+
+# Numeric & utilities
+numpy>=1.26.0
+scipy>=1.12.0
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  System-level dependencies — set up in the Dockerfile, not via pip
+# ─────────────────────────────────────────────────────────────────────────────
+#  ffmpeg / ffprobe  — audio extraction + format conversion
+#  (Optional) tesseract-ocr — only if pytesseract fallback path is used
+# ─────────────────────────────────────────────────────────────────────────────

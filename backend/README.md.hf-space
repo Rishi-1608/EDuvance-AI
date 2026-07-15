@@ -1,0 +1,17 @@
+---
+title: EduVance AI Backend
+emoji: 📚
+colorFrom: blue
+colorTo: purple
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
+# EduVance AI — Backend
+
+FastAPI backend for EduVance AI: video/document ingestion, EasyOCR, Whisper
+transcription, and Phi-3-mini reasoning (via Hugging Face Inference API).
+
+See the deployment guide for required secrets (HF_TOKEN, DATABASE_URL,
+MINIO_ENDPOINT/MINIO_ACCESS_KEY/MINIO_SECRET_KEY, JWT secret, etc).

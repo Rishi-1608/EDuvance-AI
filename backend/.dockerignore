@@ -1,0 +1,38 @@
+# Generated/runtime data — should not be baked into the image.
+# These get created fresh at runtime and are stored in Postgres/MinIO/R2,
+# not in the container filesystem (which is ephemeral on most hosts anyway).
+extracted_frames/
+pdf_reports/
+knowledge_graphs/
+student_progress/
+live_sessions/
+uploads/
+outputs/
+tmp/
+offload_tmp/
+brain/
+
+# Looks like a stray duplicate frontend build accidentally left in the
+# backend zip (266MB) — not needed for the API container.
+frontend/
+
+# Python cache/build artifacts
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# Old/unused main file versions — only main_v7-9.py is deployed.
+# Comment these out if you actually need them in the image for some reason.
+main_v7.py
+main_v7-3.py
+main_v7-8.py
+main_v7-9_backup.py
+
+# Editor/OS junk
+.vscode/
+.idea/
+.DS_Store
+
+# Env files — never bake secrets into the image; set them as Space secrets instead
+.env

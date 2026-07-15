@@ -1,0 +1,51 @@
+# ─────────────────────────────────────────────────────────────────────────────
+#  Multi-Modal Academic Intelligence System — Python Dependencies
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Web framework
+fastapi>=0.110.0
+uvicorn[standard]>=0.29.0
+python-multipart>=0.0.9     # required for FastAPI file uploads
+minio>=7.2.0                # required for MinIO storage
+
+# Computer vision (frame extraction)
+opencv-python>=4.9.0
+
+# OCR — at least one must be installed
+easyocr>=1.7.1              # PRIMARY: GPU-capable, no system deps
+# pytesseract>=0.3.10       # FALLBACK: requires Tesseract binary (apt install tesseract-ocr)
+# Pillow>=10.0.0            # required by pytesseract fallback
+
+# LLM inference (local Llama)
+torch>=2.2.0
+transformers>=4.40.0
+accelerate>=0.28.0
+# bitsandbytes>=0.43.0      # optional: enables 4-bit quantisation on GPU
+
+# Speech transcription
+openai-whisper>=20231117    # Whisper (local model)
+
+# PDF generation
+reportlab>=4.1.0
+
+# Numeric & utilities
+numpy>=1.26.0
+scipy>=1.12.0               # used for audio resampling
+
+# Markdown (optional, for rendering notes in tests)
+# markdown>=3.5.0
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  System-level dependencies (install separately)
+# ─────────────────────────────────────────────────────────────────────────────
+#  ffmpeg     — audio extraction + format conversion
+#               Ubuntu/Debian: sudo apt install ffmpeg
+#               macOS:         brew install ffmpeg
+#               Windows:       https://ffmpeg.org/download.html
+#
+#  ffprobe    — included with ffmpeg
+#
+#  (Optional) tesseract-ocr
+#               Ubuntu/Debian: sudo apt install tesseract-ocr
+#               macOS:         brew install tesseract
+# ─────────────────────────────────────────────────────────────────────────────

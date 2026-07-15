@@ -1,0 +1,9 @@
+flashcard generation pending....fix the ui according to new flow
+
+mainv7-2 is running with basic files but using prompt v6
+
+mainv7_3 is running with .1 files...
+
+mainv7_3 is running with .1 files...with optimized and all errors resolved only once model loading is reqiured .
+
+mainv7_8 is running with all optimizations and .1 files... only issue is that we need to retrieve flashcards and quiz on the basis of user sessions.

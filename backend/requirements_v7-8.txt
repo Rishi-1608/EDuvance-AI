@@ -1,0 +1,33 @@
+# ─────────────────────────────────────────────────────────────────────────────
+#  Multi-Modal Academic Intelligence System — Auth & DB Dependencies (v7-8)
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Web framework
+fastapi>=0.110.0
+uvicorn[standard]>=0.29.0
+python-multipart>=0.0.9
+
+# Computer vision
+opencv-python>=4.9.0
+
+# OCR
+easyocr>=1.7.1
+
+# LLM
+torch>=2.2.0
+transformers>=4.40.0
+accelerate>=0.28.0
+
+# Speech
+openai-whisper>=20231117
+
+# PDF
+reportlab>=4.1.0
+
+# Numeric
+numpy>=1.26.0
+scipy>=1.12.0
+
+# Authentication / env
+python-jose[cryptography]>=3.3.0
+python-dotenv>=1.0.1
