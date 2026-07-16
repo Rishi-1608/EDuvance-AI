@@ -18,8 +18,7 @@ WORKDIR /app
 # Install CPU-only torch first from the dedicated wheel index — this avoids
 # pulling the multi-GB CUDA build, which isn't needed (and won't work anyway;
 # HF Spaces CPU Basic has no GPU).
-RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
-
+RUN pip install --no-cache-dir torch==2.3.1 torchvision==0.18.1 --index-url https://download.pytorch.org/whl/cpu
 COPY requirements-deploy.txt .
 RUN pip install --no-cache-dir -r requirements-deploy.txt
 
