@@ -45,7 +45,7 @@ huggingface_hub>=0.23.0
 # install here would pull the ~2GB CUDA build, which is unnecessary and
 # much bigger than needed for a CPU-only deployment. Do not add torch to
 # this file directly.
-
+transformers==4.44.2
 # Document processing (used by academic_system pipeline)
 PyPDF2>=3.0.0
 pdfplumber>=0.10.0
