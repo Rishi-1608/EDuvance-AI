@@ -28,27 +28,13 @@ load_dotenv()
 #  Connection
 # ──────────────────────────────────────────────────────────────────────────────
 
-# Managed Postgres providers (Neon, Supabase, etc.) hand you one full
-# connection string instead of separate host/user/pass fields, and Neon in
-# particular requires SSL. If DATABASE_URL is set, it's used as-is (this is
-# the simplest path for Neon — just paste its connection string). Otherwise
-# we fall back to building one from the individual DB_* vars, for local dev
-# against a plain local Postgres with no SSL requirement.
-DATABASE_URL = os.environ.get("DATABASE_URL")
+DB_HOST = os.environ.get("DB_HOST", "localhost")
+DB_PORT = os.environ.get("DB_PORT", "5432")
+DB_NAME = os.environ.get("DB_NAME", "eduvance_db")
+DB_USER = os.environ.get("DB_USER", "postgres")
+DB_PASS = os.environ.get("DB_PASS", "postgres")
 
-if DATABASE_URL:
-    POSTGRES_URL = DATABASE_URL
-else:
-    DB_HOST = os.environ.get("DB_HOST", "localhost")
-    DB_PORT = os.environ.get("DB_PORT", "5432")
-    DB_NAME = os.environ.get("DB_NAME", "eduvance_db")
-    DB_USER = os.environ.get("DB_USER", "postgres")
-    DB_PASS = os.environ.get("DB_PASS", "postgres")
-    DB_SSLMODE = os.environ.get("DB_SSLMODE")  # e.g. "require" for Neon
-
-    POSTGRES_URL = f"postgresql://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
-    if DB_SSLMODE:
-        POSTGRES_URL += f"?sslmode={DB_SSLMODE}"
+POSTGRES_URL = f"postgresql://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 
 engine = create_engine(
     POSTGRES_URL,
@@ -81,6 +67,7 @@ class User(Base):
     # Relationships
     media:    Mapped[List["Media"]]    = relationship(back_populates="owner", cascade="all, delete-orphan")
     progress: Mapped[List["Progress"]] = relationship(back_populates="user",  cascade="all, delete-orphan")
+    quiz_sessions: Mapped[List["QuizSession"]] = relationship(back_populates="user", cascade="all, delete-orphan")
 
 class Media(Base):
     """The universal intake table. Record of every upload."""
@@ -106,6 +93,7 @@ class Media(Base):
     quiz_questions: Mapped[List["QuizQuestion"]] = relationship(back_populates="media", cascade="all, delete-orphan")
     notes:          Mapped[List["Note"]]         = relationship(back_populates="media", cascade="all, delete-orphan")
     progress:       Mapped[List["Progress"]]     = relationship(back_populates="media", cascade="all, delete-orphan")
+    quiz_sessions:  Mapped[List["QuizSession"]]  = relationship(back_populates="media", cascade="all, delete-orphan")
     transcription_segments: Mapped[List["TranscriptionSegment"]] = relationship(back_populates="media", cascade="all, delete-orphan")
     result_stats:   Mapped[Optional["MediaResultStats"]] = relationship(back_populates="media", uselist=False, cascade="all, delete-orphan")
 
@@ -296,6 +284,55 @@ class Progress(Base):
 
     user:  Mapped["User"]  = relationship(back_populates="progress")
     media: Mapped["Media"] = relationship(back_populates="progress")
+
+class QuizSession(Base):
+    """Stores the final results of a completed quiz attempt."""
+    __tablename__ = "quiz_sessions"
+
+    id:           Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id:      Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    media_id:     Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("media.id", ondelete="CASCADE"), nullable=False, index=True)
+    
+    total_questions: Mapped[int]    = mapped_column(Integer, nullable=False)
+    correct_answers: Mapped[int]    = mapped_column(Integer, nullable=False)
+    accuracy_score:  Mapped[float]  = mapped_column(Float, nullable=False) # percentage (0-100)
+    
+    started_at:   Mapped[datetime]  = mapped_column(DateTime, server_default=func.now())
+    completed_at: Mapped[datetime]  = mapped_column(DateTime, server_default=func.now())
+
+    user:  Mapped["User"]  = relationship(back_populates="quiz_sessions")
+    media: Mapped["Media"] = relationship(back_populates="quiz_sessions")
+
+class LiveLecture(Base):
+    """Stores live lecture sessions."""
+    __tablename__ = "live_lectures"
+
+    id:            Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id:       Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    session_id:    Mapped[str]       = mapped_column(String(128), unique=True, index=True, nullable=False)
+    title:         Mapped[str]       = mapped_column(String(512), nullable=False)
+    state:         Mapped[str]       = mapped_column(String(32), nullable=False, default="created")
+    started_at:    Mapped[float]     = mapped_column(Float, nullable=False)
+    ended_at:      Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    pipeline_stem: Mapped[str]       = mapped_column(String(256), nullable=False)
+    full_text:     Mapped[str]       = mapped_column(Text, nullable=True)
+    created_at:    Mapped[datetime]  = mapped_column(DateTime, server_default=func.now())
+
+    transcription_segments: Mapped[List["LiveTranscriptionSegment"]] = relationship(back_populates="live_lecture", cascade="all, delete-orphan")
+
+class LiveTranscriptionSegment(Base):
+    """Stores real-time transcription chunks for live lectures."""
+    __tablename__ = "live_transcription_segments"
+
+    id:              Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    live_lecture_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("live_lectures.id", ondelete="CASCADE"), nullable=False, index=True)
+    
+    segment_index:   Mapped[int]       = mapped_column(Integer, nullable=False)
+    start_time:      Mapped[float]     = mapped_column(Float, nullable=False)
+    end_time:        Mapped[float]     = mapped_column(Float, nullable=False)
+    text:            Mapped[str]       = mapped_column(Text, nullable=False)
+    
+    live_lecture: Mapped["LiveLecture"] = relationship(back_populates="transcription_segments")
 
 # ──────────────────────────────────────────────────────────────────────────────
 #  DB Init

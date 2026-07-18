@@ -124,17 +124,7 @@ from pydantic import BaseModel, Field
 from video_pipeline.config1 import config
 from video_pipeline.core.stream_manager import StreamManager
 from video_pipeline.detection.ocr import OCRExtractor
-
-# PHI3_BACKEND=local  -> load Phi-3-mini on a local CUDA GPU (phi3_engine.py)
-# PHI3_BACKEND=api     -> call Phi-3-mini via the Hugging Face Inference API
-#                         (phi3_engine_api.py) — use this for CPU-only deploys.
-# Defaults to "api" so a fresh cloud deployment works without extra config;
-# set PHI3_BACKEND=local when running on your own GPU machine.
-if os.environ.get("PHI3_BACKEND", "api").lower() == "local":
-    from video_pipeline.reasoning.phi3_engine import Phi3Reasoner as LlamaReasoner
-else:
-    from video_pipeline.reasoning.phi3_engine_api import Phi3Reasoner as LlamaReasoner
-
+from video_pipeline.reasoning.phi3_engine import Phi3Reasoner as LlamaReasoner
 from video_pipeline.utils.device import setup_device
 from video_pipeline.utils.logger import get_logger
 
@@ -171,6 +161,11 @@ from academic_system.pdf_pipeline import (
     init_pdf_pipeline_singletons,
     _check_pdf_backends,
 )
+
+# Keep strong references to background asyncio tasks so they aren't garbage collected
+_background_tasks = set()
+
+from live_lecture import router as live_router
 
 # ── v3 additions ──────────────────────────────────────────────────────────────
 from academic_system.slide_detector   import SlideChangeDetector
@@ -236,6 +231,14 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.include_router(live_router)
+
+@app.on_event("startup")
+def on_startup():
+    from database_v2 import init_db
+    logger.info("Initializing database schema...")
+    init_db()
+    logger.info("Database initialized.")
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -317,6 +320,37 @@ async def startup_event():
     logger.info("[STARTUP] PDF pipeline singletons initialised.")
 
 
+def get_or_load_shared_llm(context_label: str = "General") -> LlamaReasoner:
+    """
+    Checks for a shared LLM instance, synchronises it from the background ref
+    if necessary, and loads it if it's missing.
+    """
+    global _shared_llm, _shared_llm_ref
+    
+    # 1. Sync from ref (e.g. if PDF pipeline loaded it in background)
+    if _shared_llm is None and _shared_llm_ref[0] is not None:
+        _shared_llm = _shared_llm_ref[0]
+        logger.info(f"[{context_label}] Recovered _shared_llm from background ref.")
+
+    # 2. Return if exists
+    if _shared_llm is not None:
+        logger.info(f"[{context_label}] Reusing shared Phi-3 LLM.")
+        return _shared_llm
+
+    # 3. Load fresh
+    logger.info(f"[{context_label}] Loading Phi-3 into VRAM…")
+    _shared_llm = LlamaReasoner(
+        model_id       = config.reasoning_model_id,
+        max_new_tokens = config.max_reasoning_tokens,
+        device         = setup_device(),
+        load_in_4bit   = config.phi3_load_in_4bit,
+        adapter_path   = config.phi3_adapter_path or None,
+    )
+    # Ensure ref is also updated so other background tasks see it
+    _shared_llm_ref[0] = _shared_llm
+    return _shared_llm
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 #  UTILITIES  (100 % unchanged from v3.2.0)
 # ──────────────────────────────────────────────────────────────────────────────
@@ -359,9 +393,21 @@ def _make_frame_url(rel: str) -> str:
 
 
 def _video_frames_dir(video_path: str) -> str:
-    d = os.path.join(FRAMES_BASE_DIR, Path(video_path).stem)
+    # Sanitize and shorten stem to avoid MAX_PATH issues on Windows
+    full_stem = Path(video_path).stem
+    # Keep UUID prefix if present, then shorten title, remove special chars
+    parts = full_stem.split('_', 1)
+    if len(parts) > 1:
+        prefix, title = parts[0], parts[1]
+        clean_title = "".join(c if c.isalnum() else "_" for c in title)[:50]
+        short_stem = f"{prefix}_{clean_title}"
+    else:
+        short_stem = "".join(c if c.isalnum() else "_" for c in full_stem)[:100]
+        
+    d = os.path.join(FRAMES_BASE_DIR, short_stem)
     os.makedirs(d, exist_ok=True)
     return d
+
 
 
 def save_frame(
@@ -373,8 +419,11 @@ def save_frame(
     frames_dir = _video_frames_dir(video_path)
     filename   = f"frame_{frame_id:05d}_t{timestamp:.3f}s.jpg"
     path       = os.path.join(frames_dir, filename)
-    cv2.imwrite(path, frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
+    success    = cv2.imwrite(path, frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
+    if not success:
+        logger.error(f"[Save] cv2.imwrite failed for {path} (Path too long or invalid chars?)")
     rel = os.path.relpath(path)
+
     
     # Upload to MinIO
     try:
@@ -814,7 +863,7 @@ def _salvage_flashcards_quiz_from_malformed(raw_text: str) -> Dict[str, Any]:
 
 def _find_any_lecture(stem: str, user_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
     for v in academic_results.values():
-        if v.get("input_type") not in ("video", "images", "pdf", "document"):
+        if v.get("input_type") not in ("video", "images", "pdf", "document", "live"):
             continue
 
         candidate_paths = [
@@ -1101,19 +1150,7 @@ async def run_image_batch_pipeline(
         logger.info("[Image Pipeline] Initialising OCR engine (CPU)…")
         ocr = OCRExtractor(use_gpu=False)   # always CPU — saves VRAM for Phi-3
 
-        if _shared_llm is not None:
-            logger.info("[Image Pipeline] Reusing shared Phi-3 LLM.")
-            llm = _shared_llm
-        else:
-            logger.info("[Image Pipeline] Loading Phi-3 into VRAM…")
-            llm = LlamaReasoner(
-                model_id       = config.reasoning_model_id,
-                max_new_tokens = config.max_reasoning_tokens,
-                device         = setup_device(),
-                load_in_4bit   = config.phi3_load_in_4bit,
-                adapter_path   = config.phi3_adapter_path or None,
-            )
-            _shared_llm = llm
+        llm = get_or_load_shared_llm("Image Pipeline")
 
         lang_info = _lang_detector.from_code("en")
 
@@ -1439,27 +1476,8 @@ async def _run_flashcard_generation_with_llm(video_stem: str, user_id: Optional[
     global _shared_llm, _shared_llm_ref
     state = _flashcard_states[video_stem]
 
-    # Sync _shared_llm from ref in case PDF pipeline wrote it there
-    if _shared_llm is None and _shared_llm_ref[0] is not None:
-        _shared_llm = _shared_llm_ref[0]
-        logger.info(f"[Flashcards/{video_stem}] Recovered _shared_llm from ref.")
-
-    if _shared_llm is not None:
-        logger.info(f"[Flashcards/{video_stem}] Reusing pipeline LLM — no reload needed.")
-        await _run_flashcard_generation(video_stem, _shared_llm, user_id=user_id)
-        return
-
-    logger.info(f"[Flashcards/{video_stem}] No shared LLM found — loading fresh instance.")
-    device = setup_device()
     try:
-        llm = LlamaReasoner(
-            model_id       = config.reasoning_model_id,
-            max_new_tokens = config.max_reasoning_tokens,
-            device         = device,
-            load_in_4bit   = config.phi3_load_in_4bit,
-            adapter_path   = config.phi3_adapter_path or None,
-        )
-        _shared_llm = llm
+        llm = get_or_load_shared_llm(f"Flashcards/{video_stem}")
     except Exception as exc:
         logger.error(f"[Flashcards/{video_stem}] LLM load FAILED: {exc}", exc_info=True)
         state["state"] = "failed"
@@ -1731,15 +1749,8 @@ async def run_academic_pipeline(
     def _load_models() -> None:
         nonlocal llm, ocr_extractor
         try:
-            logger.info(f"Loading Phi-3 ({'sequential' if sequential_mode else 'background'})…")
-            _log_vram("before Phi-3 load")
-            llm = LlamaReasoner(
-                model_id       = config.reasoning_model_id,
-                max_new_tokens = config.max_reasoning_tokens,
-                device         = device,
-                load_in_4bit   = config.phi3_load_in_4bit,
-                adapter_path   = config.phi3_adapter_path or None,
-            )
+            llm = get_or_load_shared_llm("Stream Pipeline")
+
             logger.info(f"Loading EasyOCR (gpu={ocr_use_gpu})…")
             ocr_extractor = OCRExtractor(use_gpu=ocr_use_gpu)
 
@@ -1748,11 +1759,8 @@ async def run_academic_pipeline(
             if not callable(getattr(ocr_extractor, "extract", None)):
                 raise RuntimeError("OCRExtractor does not expose .extract().")
 
-            logger.info("Models ready ✓ (Phi-3 + EasyOCR)")
+            logger.info("Models ready [OK] (Phi-3 + EasyOCR)")
             _log_vram("after Phi-3 + EasyOCR load")
-
-            global _shared_llm
-            _shared_llm = llm
 
         except Exception as exc:
             _model_error[0] = exc
@@ -2157,13 +2165,16 @@ async def run_academic_pipeline(
             await asyncio.sleep(5.0)  # increase from 2.0 to 5.0 for long videos
 
             if torch.cuda.is_available():
+                import gc
+                gc.collect()
                 torch.cuda.synchronize()
                 torch.cuda.empty_cache()
                 torch.cuda.synchronize()  # second sync to confirm flush
                 vfree, vtotal = torch.cuda.mem_get_info()
-                logger.info(f"[Memory] After release: {vfree/(1024**3):.2f}GB free of {vtotal/(1024**3):.2f}GB")
-                # Safety check — abort Phi-3 load if not enough VRAM
-                if vfree < 2.8 * (1024**3):
+                logger.info(f"[Memory] After 5s cooldown: {vfree/(1024**3):.2f}GB free of {vtotal/(1024**3):.2f}GB")
+
+                # Safety check — abort Phi-3 load if not enough VRAM (only if not already loaded)
+                if _shared_llm is None and vfree < 2.8 * (1024**3):
                     logger.error(f"[Memory] Insufficient VRAM ({vfree/(1024**3):.2f}GB) — Phi-3 load would OOM. Aborting.")
                     raise RuntimeError("Insufficient VRAM after Whisper release.")
             _log_vram("after Whisper release")
@@ -2525,6 +2536,11 @@ class ReviewRequest(BaseModel):
     session_id: Optional[str] = Field(None)
 
 
+class QuizSessionRequest(BaseModel):
+    total_questions: int
+    correct_answers: int
+
+
 # v3.2.1: auth models
 class UserRegister(BaseModel):
     username: str
@@ -2633,7 +2649,7 @@ async def chat_endpoint(
             
     context_str = "\n".join(context_lines)
     
-    sys_prompt = f"""You are AcademIQ's AI Assistant. Your ONLY purpose is to answer questions about how the app works and provide information about the user's uploaded media and academic content.
+    sys_prompt = f"""You are EDUvance's AI Assistant created by Mr.Rishi Singh. Your ONLY purpose is to answer questions about how the app works and provide information about the user's uploaded media and academic content.
 
 Here is the user's uploaded content summary:
 {context_str}
@@ -2647,15 +2663,7 @@ RESPONSE RULES:
 - If the question is outside the app's functionality or the user's uploaded content, politely decline in one sentence.
 - Never over-explain. Be concise, helpful, and academic in tone."""
 
-    if _shared_llm is None:
-        logger.info("[Chat] Loading Phi-3 into VRAM…")
-        _shared_llm = LlamaReasoner(
-            model_id       = config.reasoning_model_id,
-            max_new_tokens = config.max_reasoning_tokens,
-            device         = setup_device(),
-            load_in_4bit   = config.phi3_load_in_4bit,
-            adapter_path   = config.phi3_adapter_path or None,
-        )
+    _shared_llm = get_or_load_shared_llm("Chat")
 
     # Build prompt for Phi-3 Instruct format
     conversation_prompt = f"<|system|>\n{sys_prompt}<|end|>\n"
@@ -2783,6 +2791,7 @@ async def upload_video(
         }
         video_paths.append(dest)
 
+    # Keep strong reference to task to prevent garbage collection mid-execution
     pipeline_task = asyncio.create_task(
         run_academic_pipeline(
             video_paths,
@@ -2790,6 +2799,8 @@ async def upload_video(
             user_id=current_user.id,            # v3.2.1
         )
     )
+    _background_tasks.add(pipeline_task)
+    pipeline_task.add_done_callback(_background_tasks.discard)
 
     duration_info = {}
     for vp in video_paths:
@@ -3282,7 +3293,7 @@ async def status(
     # v3.2.1: treat video and image-batch the same in status
     all_active = {
         p: v for p, v in academic_results.items()
-        if v.get("input_type") in ("video", "images", "pdf", "document") and v.get("user_id") == current_user.id
+        if v.get("input_type") in ("video", "images", "pdf", "document", "live") and v.get("user_id") == current_user.id
     }
     audios = {
         p: v for p, v in academic_results.items()
@@ -3723,7 +3734,14 @@ async def stream_video(
     v = _find_any_lecture(video_stem, current_user.id)
     if v and v.get("user_id") == current_user.id:
         video_path = v.get("video_path")
-            
+        
+        # Support for Live Lecture audio playback
+        if v.get("input_type") == "live" and v.get("live_session_id"):
+            session_id = v.get("live_session_id")
+            audio_path = os.path.join("live_audio", session_id, "final_merged.wav")
+            if os.path.isfile(audio_path):
+                return FileResponse(audio_path, media_type="audio/wav")
+
     if not video_path:
         # Final fallback - try to find in uploads dir
         for f in os.listdir(UPLOAD_DIR):
@@ -3895,11 +3913,29 @@ async def dashboard_stats(
     from db_actions import get_db_media_states
     db_states_dict = get_db_media_states(str(current_user.id))
     disk_states = list(db_states_dict.values())
+    
+    # Include live lectures
+    from database_v2 import SessionLocal, LiveLecture
+    db = SessionLocal()
+    try:
+        live_lectures_db = db.query(LiveLecture).filter(LiveLecture.user_id == current_user.id).all()
+        for ll in live_lectures_db:
+            disk_states.append({
+                "video_stem": ll.pipeline_stem or ll.session_id,
+                "display_name": ll.title,
+                "input_type": "live",
+                "created_at": ll.created_at.timestamp() if ll.created_at else 0
+            })
+    except Exception as e:
+        pass
+    finally:
+        db.close()
 
     total_lectures = len([s for s in disk_states if s["input_type"] == "video"])
     total_images = len([s for s in disk_states if s["input_type"] == "images"])
     total_docs = len([s for s in disk_states if s["input_type"] == "document"])
     total_audios = len([s for s in disk_states if s["input_type"] == "audio"])
+    total_live = len([s for s in disk_states if s["input_type"] == "live"])
 
     last_48h_lectures = len([s for s in disk_states if s["input_type"] == "video" and s["created_at"] >= last_48h_ts])
     last_48h_images = len([s for s in disk_states if s["input_type"] == "images" and s["created_at"] >= last_48h_ts])
@@ -3912,8 +3948,29 @@ async def dashboard_stats(
         reverse=True,
     )[:10]
 
-    from db_actions import get_db_user_progress_stats
+    from db_actions import get_db_user_progress_stats, get_study_recommendations
     progress_stats = get_db_user_progress_stats(str(current_user.id))
+    study_recs = get_study_recommendations(str(current_user.id))
+
+    # ── Subject area distribution for donut chart ──
+    subject_counts = {}
+    for s in disk_states:
+        subj = (s.get("subject_area") or "").strip()
+        if subj:
+            # Collapse sub-topics into main subjects (e.g. "Physics - Kinematics" -> "Physics")
+            # We look for common separators: " - ", ":", " > ", "-", "/", or "|"
+            for sep in [" - ", ":", " > ", "-", "/", "|"]:
+                if sep in subj:
+                    subj = subj.split(sep)[0].strip()
+                    break
+
+            
+            if subj:
+                # Standardize capitalization (e.g., "physics" -> "Physics")
+                subj = subj.title()
+                subject_counts[subj] = subject_counts.get(subj, 0) + 1
+
+
 
     return JSONResponse({
         "total_lectures":  total_lectures,
@@ -3926,7 +3983,10 @@ async def dashboard_stats(
             "audios": last_48h_audios,
             "docs":   last_48h_docs,
         },
+        "total_live": total_live,
         "engagement": progress_stats,
+        "subject_distribution": subject_counts,
+        "study_recommendations": study_recs,
         "recent_lectures": [
             {
                 "stem": item["video_stem"],
@@ -3937,6 +3997,101 @@ async def dashboard_stats(
             for item in recent_lectures
         ],
     })
+
+
+@app.post("/dashboard/generate-plan/{stem}", summary="Generate AI Study Plan", tags=["Dashboard"])
+async def generate_study_plan_endpoint(
+    stem: str,
+    current_user: User = Depends(auth.get_current_user)
+):
+    """
+    Generate a 1-paragraph personalized study plan based on lecture context.
+    """
+    global _shared_llm
+    from db_actions import get_lecture_context_for_plan
+    
+    ctx = get_lecture_context_for_plan(str(current_user.id), stem)
+    if not ctx:
+        raise HTTPException(404, f"Lecture context for stem '{stem}' not found.")
+
+    # Format context for LLM
+    quiz_info = f"Recent quiz scores: {ctx['quiz_scores']}" if ctx['quiz_scores'] else "No quiz attempts yet."
+    flash_info = f"Flashcards: {ctx['flashcard_stats']['reviewed']}/{ctx['flashcard_stats']['total']} reviewed (Avg Confidence: {ctx['flashcard_stats']['avg_confidence']:.1f}/5.0)"
+    
+    topics_str = ", ".join(ctx['topics']) if ctx['topics'] else "None listed"
+    
+    prompt_context = f"""
+Lecture: {ctx['title']}
+Subject: {ctx['subject']}
+Topics: {topics_str}
+Summary: {ctx['summary'][:500]}...
+Performance: {quiz_info}. {flash_info}.
+"""
+
+    sys_prompt = """You are an expert academic tutor. Your goal is to provide a concise, high-impact 1-paragraph study plan (3-5 sentences) for a specific lecture based on the user's performance and the lecture content.
+Focus on what they should do NEXT to improve (e.g., "Re-read the section on X", "Attempt another quiz", or "Review flashcards with low confidence").
+Be encouraging but direct and academic. Do NOT use bullet points. DO NOT use greetings like "Hello" or "Sure"."""
+
+    _shared_llm = get_or_load_shared_llm("Dashboard Plan")
+
+    full_prompt = f"<|system|>\n{sys_prompt}<|end|>\n<|user|>\nProvide a study plan for:\n{prompt_context}<|end|>\n<|assistant|>\n"
+    
+    try:
+        response_text = _llm_reason_text(_shared_llm, full_prompt, 250)
+        response_text = response_text.replace("<|end|>", "").replace("<|endoftext|>", "").strip()
+        return {"plan": response_text}
+    except Exception as e:
+        logger.error(f"[Dashboard Plan] failed: {e}")
+        raise HTTPException(500, f"Error generating study plan: {e}")
+
+
+@app.post("/dashboard/generate-mindmap/{stem}", summary="Generate Mermaid.js Mind Map", tags=["Dashboard"])
+async def generate_mindmap_endpoint(
+    stem: str,
+    current_user: User = Depends(auth.get_current_user)
+):
+    """
+    Generate a Mermaid.js mindmap string for the lecture structure.
+    """
+    global _shared_llm
+    from db_actions import get_lecture_context_for_plan
+    
+    ctx = get_lecture_context_for_plan(str(current_user.id), stem)
+    if not ctx:
+        raise HTTPException(404, f"Lecture context for stem '{stem}' not found.")
+
+    from academic_system.prompts1 import prompt_mindmap
+    # We pass topics and concepts for a hierarchical structure
+    p_text = prompt_mindmap(ctx['title'], ctx['subject'], ctx['topics'], ctx['concepts'])
+    full_prompt = f"<|user|>\n{p_text}<|end|>\n<|assistant|>\n"
+
+    _shared_llm = get_or_load_shared_llm("Dashboard Mindmap")
+
+    try:
+        response_text = _llm_reason_text(_shared_llm, full_prompt, 500)
+        # Clean up tags
+        response_text = response_text.replace("<|end|>", "").replace("<|endoftext|>", "").strip()
+        
+        # Strip markdown code fences if model included them
+        if "```mermaid" in response_text:
+            response_text = response_text.split("```mermaid")[1].split("```")[0].strip()
+        elif "```" in response_text:
+            # handle case where it just says ```
+            parts = response_text.split("```")
+            if len(parts) >= 3:
+                response_text = parts[1].strip()
+            else:
+                response_text = parts[0].strip()
+        
+        # Ensure it starts with mindmap
+        if not response_text.startswith("mindmap") and "mindmap" in response_text:
+            response_text = "mindmap" + response_text.split("mindmap")[1]
+            
+        return {"mindmap": response_text}
+    except Exception as e:
+        logger.error(f"[Dashboard Mindmap] failed: {e}")
+        raise HTTPException(500, f"Error generating mind map: {e}")
+
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -4112,6 +4267,32 @@ async def get_due_cards(
         )
     )
     return due[:limit]
+
+
+@app.post(
+    "/quiz/session/{video_stem}",
+    summary="Record a completed quiz session summary",
+    tags=["Student Progress"],
+)
+async def quiz_session(
+    video_stem: str,
+    body:       QuizSessionRequest,
+    current_user: User = Depends(auth.get_current_user),
+) -> JSONResponse:
+    """Persist a quiz score summary to the database for accuracy tracking."""
+    from db_actions import save_quiz_session_to_db
+    
+    save_quiz_session_to_db(
+        user_id         = str(current_user.id),
+        video_stem      = video_stem,
+        total_questions = body.total_questions,
+        correct_answers = body.correct_answers,
+    )
+
+    return JSONResponse({
+        "message": "Quiz session recorded.",
+        "accuracy": (body.correct_answers / body.total_questions * 100) if body.total_questions > 0 else 0
+    })
 
 
 # ──────────────────────────────────────────────────────────────────────────────
