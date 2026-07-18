@@ -28,13 +28,27 @@ load_dotenv()
 #  Connection
 # ──────────────────────────────────────────────────────────────────────────────
 
-DB_HOST = os.environ.get("DB_HOST", "localhost")
-DB_PORT = os.environ.get("DB_PORT", "5432")
-DB_NAME = os.environ.get("DB_NAME", "eduvance_db")
-DB_USER = os.environ.get("DB_USER", "postgres")
-DB_PASS = os.environ.get("DB_PASS", "postgres")
+# Managed Postgres providers (Neon, Supabase, etc.) hand you one full
+# connection string instead of separate host/user/pass fields, and Neon in
+# particular requires SSL. If DATABASE_URL is set, it's used as-is (this is
+# the simplest path for Neon — just paste its connection string). Otherwise
+# we fall back to building one from the individual DB_* vars, for local dev
+# against a plain local Postgres with no SSL requirement.
+DATABASE_URL = os.environ.get("DATABASE_URL")
 
-POSTGRES_URL = f"postgresql://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+if DATABASE_URL:
+    POSTGRES_URL = DATABASE_URL
+else:
+    DB_HOST = os.environ.get("DB_HOST", "localhost")
+    DB_PORT = os.environ.get("DB_PORT", "5432")
+    DB_NAME = os.environ.get("DB_NAME", "eduvance_db")
+    DB_USER = os.environ.get("DB_USER", "postgres")
+    DB_PASS = os.environ.get("DB_PASS", "postgres")
+    DB_SSLMODE = os.environ.get("DB_SSLMODE")  # e.g. "require" for Neon
+
+    POSTGRES_URL = f"postgresql://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+    if DB_SSLMODE:
+        POSTGRES_URL += f"?sslmode={DB_SSLMODE}"
 
 engine = create_engine(
     POSTGRES_URL,
