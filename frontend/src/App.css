@@ -88,9 +88,15 @@
 }
 
 @media (max-width: 768px) {
+  .app {
+    width: 100vw;
+    overflow-x: hidden;
+  }
+
   .app-main {
     margin-left: 0;
     padding-bottom: 72px;
+    /* space for mobile bottom bar */
   }
 
   .page-utility-bar {

@@ -112,7 +112,7 @@ export function DiagnosticsPage() {
               <CheckCircle2 size={16} style={{ color: 'var(--success)' }} />
               Architecture: Multi-User Persistent (v3.2.x)
             </div>
-            <div style={{ padding: '0 16px 12px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 24px' }}>
+            <div style={{ padding: '0 16px 12px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px 24px' }}>
               {[
                 ...(diag.v321_additions?.db_persistence || "").split(','),
                 diag.v321_additions?.user_isolation,

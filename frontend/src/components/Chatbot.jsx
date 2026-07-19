@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { sendChatMessage } from '@/lib/api';
 import { MessageSquare, X, Send } from 'lucide-react';
 import './Chatbot.css';
@@ -10,14 +10,17 @@ export function Chatbot() {
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef(null);
 
+  // ── Drag state ──
+  const [btnPos, setBtnPos] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const dragRef = useRef({ startX: 0, startY: 0, origX: 0, origY: 0, moved: false });
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
   useEffect(() => {
-    if (isOpen) {
-        scrollToBottom();
-    }
+    if (isOpen) scrollToBottom();
   }, [messages, isOpen]);
 
   const handleSend = async () => {
@@ -30,7 +33,6 @@ export function Chatbot() {
     setIsLoading(true);
 
     try {
-      // Send the entire chat history (backend limits it to last 5 internally)
       const data = await sendChatMessage(newMessages);
       setMessages([...newMessages, { role: 'assistant', content: data.response }]);
     } catch (err) {
@@ -41,10 +43,95 @@ export function Chatbot() {
     }
   };
 
+  // ── Drag handlers (mouse + touch) ──
+  const handleDragStart = useCallback((clientX, clientY) => {
+    setIsDragging(true);
+    dragRef.current = {
+      startX: clientX,
+      startY: clientY,
+      origX: btnPos.x,
+      origY: btnPos.y,
+      moved: false,
+    };
+  }, [btnPos]);
+
+  const handleDragMove = useCallback((clientX, clientY) => {
+    if (!isDragging) return;
+    const dx = clientX - dragRef.current.startX;
+    const dy = clientY - dragRef.current.startY;
+    if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
+      dragRef.current.moved = true;
+    }
+    setBtnPos({
+      x: dragRef.current.origX + dx,
+      y: dragRef.current.origY + dy,
+    });
+  }, [isDragging]);
+
+  const handleDragEnd = useCallback(() => {
+    setIsDragging(false);
+  }, []);
+
+  // Mouse events
+  const onMouseDown = useCallback((e) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    handleDragStart(e.clientX, e.clientY);
+
+    const onMove = (ev) => {
+      ev.preventDefault();
+      handleDragMove(ev.clientX, ev.clientY);
+    };
+    const onUp = () => {
+      handleDragEnd();
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }, [handleDragStart, handleDragMove, handleDragEnd]);
+
+  // Touch events
+  const onTouchStart = useCallback((e) => {
+    const t = e.touches[0];
+    handleDragStart(t.clientX, t.clientY);
+  }, [handleDragStart]);
+
+  const onTouchMove = useCallback((e) => {
+    const t = e.touches[0];
+    handleDragMove(t.clientX, t.clientY);
+  }, [handleDragMove]);
+
+  const onTouchEnd = useCallback(() => {
+    handleDragEnd();
+  }, [handleDragEnd]);
+
+  // Click handler — suppress if drag occurred
+  const handleToggleClick = useCallback(() => {
+    if (dragRef.current.moved) {
+      dragRef.current.moved = false;
+      return;
+    }
+    setIsOpen(true);
+  }, []);
+
   return (
     <div className="chatbot-container">
       {!isOpen && (
-        <button className="chatbot-toggle-btn animate-in" onClick={() => setIsOpen(true)}>
+        <button
+          className="chatbot-toggle-btn animate-in"
+          style={{
+            transform: `translate(${btnPos.x}px, ${btnPos.y}px)`,
+            cursor: isDragging ? 'grabbing' : 'grab',
+            transition: isDragging ? 'none' : 'transform 0.15s ease, box-shadow 0.2s ease',
+            touchAction: 'none',
+          }}
+          onMouseDown={onMouseDown}
+          onTouchStart={onTouchStart}
+          onTouchMove={onTouchMove}
+          onTouchEnd={onTouchEnd}
+          onClick={handleToggleClick}
+        >
           <MessageSquare size={24} />
         </button>
       )}
@@ -93,3 +180,4 @@ export function Chatbot() {
     </div>
   );
 }
+

@@ -175,8 +175,13 @@
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
 }
 
 .upload-modal {
@@ -196,8 +201,15 @@
 }
 
 @keyframes scaleUp {
-  from { transform: scale(0.92); opacity: 0; }
-  to { transform: scale(1); opacity: 1; }
+  from {
+    transform: scale(0.92);
+    opacity: 0;
+  }
+
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
 }
 
 .modal-header {
@@ -383,7 +395,9 @@
 /* ── Responsive ── */
 @media (max-width: 768px) {
   .upload-page {
-    padding: 4px 16px 80px;
+    padding: 24px 16px 90px;
+    overflow-y: auto;
+    justify-content: flex-start;
   }
 
   .home-hero {
@@ -392,6 +406,7 @@
 
   .home-features {
     flex-direction: column;
+    gap: 12px;
   }
 
   .home-primary-btn {

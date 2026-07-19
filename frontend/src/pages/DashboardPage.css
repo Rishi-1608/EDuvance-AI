@@ -213,6 +213,21 @@
   filter: drop-shadow(0 0 12px rgba(16, 185, 129, 0.4));
 }
 
+.proc-empty-icon {
+  margin-bottom: 1.5rem;
+  filter: drop-shadow(0 0 12px rgba(99, 102, 241, 0.2));
+}
+
+.proc-title-text {
+  font-size: 1.75rem;
+  margin-bottom: 1rem;
+}
+
+.proc-desc-text {
+  color: #94a3b8;
+  margin-bottom: 2rem;
+}
+
 .proc-empty-state {
   opacity: 0.7;
 }
@@ -232,4 +247,107 @@
 @keyframes pulse-slow {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.6; }
+}
+
+@media (max-width: 768px) {
+  .processing-view {
+    padding: 12px;
+    min-height: 0;
+    height: 100%;
+    justify-content: center;
+  }
+
+  .proc-container {
+    max-width: 100%;
+  }
+
+  .proc-card {
+    padding: 1.5rem 1.25rem;
+    border-radius: 20px;
+    box-shadow: 0 15px 35px rgba(0, 0, 0, 0.4);
+  }
+
+  .loader-wrapper {
+    margin-bottom: 1.25rem;
+  }
+
+  .main-loader {
+    width: 64px;
+    height: 64px;
+  }
+
+  .loader-ring {
+    border-width: 3px;
+  }
+
+  .loader-icon {
+    width: 22px !important;
+    height: 22px !important;
+  }
+
+  .proc-status-text {
+    font-size: 0.95rem;
+  }
+
+  .proc-pct {
+    font-size: 1.1rem;
+  }
+
+  .proc-progress-section {
+    margin-bottom: 1.25rem;
+  }
+
+  .proc-bar-track {
+    height: 6px;
+  }
+
+  .proc-steps-log {
+    padding: 0.6rem 0.75rem;
+    max-height: 80px;
+    border: 1px solid rgba(99, 102, 241, 0.15);
+    background: rgba(0, 0, 0, 0.4);
+    box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.5);
+  }
+
+  .log-entry {
+    font-size: 0.7rem;
+    gap: 6px;
+    margin-bottom: 4px;
+  }
+
+  .proc-actions {
+    margin-top: 1.25rem;
+    flex-direction: row;
+    gap: 8px;
+  }
+
+  .proc-actions .btn {
+    flex: 1;
+    width: auto;
+    padding: 10px !important;
+    font-size: 0.8rem !important;
+    border-radius: 10px !important;
+  }
+
+  .proc-done-icon {
+    width: 48px;
+    height: 48px;
+    margin-bottom: 1rem;
+  }
+
+  .proc-empty-icon {
+    width: 48px !important;
+    height: 48px !important;
+    margin-bottom: 1rem !important;
+  }
+
+  .proc-title-text {
+    font-size: 1.25rem !important;
+    margin-bottom: 0.75rem !important;
+  }
+
+  .proc-desc-text {
+    font-size: 0.85rem !important;
+    margin-bottom: 1.25rem !important;
+  }
 }

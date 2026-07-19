@@ -119,10 +119,10 @@ export function DashboardPage({ onTabChange, isUploading }) {
           ) : isDone ? (
             <div className="proc-done-state">
               <CheckCircle2 size={64} className="proc-done-icon" />
-              <h2 className="proc-status-text" style={{ fontSize: '1.75rem', marginBottom: '1rem' }}>
+              <h2 className="proc-status-text proc-title-text">
                 Processing Complete
               </h2>
-              <p style={{ color: '#94a3b8', marginBottom: '2rem' }}>
+              <p className="proc-desc-text">
                 All lecture materials are ready in your library.
               </p>
               <div className="proc-actions">
@@ -136,11 +136,11 @@ export function DashboardPage({ onTabChange, isUploading }) {
             </div>
           ) : (
             <div className="proc-empty-state">
-              <Zap size={64} style={{ color: '#94a3b8', marginBottom: '1.5rem', opacity: 0.5 }} />
-              <h2 className="proc-status-text" style={{ fontSize: '1.75rem', marginBottom: '1rem' }}>
+              <Zap size={64} className="proc-empty-icon" style={{ color: '#94a3b8', opacity: 0.5 }} />
+              <h2 className="proc-status-text proc-title-text">
                 System Idle
               </h2>
-              <p style={{ color: '#94a3b8', marginBottom: '2rem' }}>
+              <p className="proc-desc-text">
                 No active processing tasks. Upload a lecture to begin.
               </p>
               <div className="proc-actions">

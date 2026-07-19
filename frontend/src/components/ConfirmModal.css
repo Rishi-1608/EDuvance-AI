@@ -119,3 +119,10 @@
 .animate-scale-in {
   animation: scaleIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
+
+@media (max-width: 480px) {
+  .confirm-modal {
+    padding: 20px;
+    margin: 16px;
+  }
+}

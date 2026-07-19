@@ -394,3 +394,14 @@
   .sidebar { display: none; }
   .mobile-bar { display: flex; }
 }
+
+@media (max-width: 480px) {
+  .mobile-bar-item {
+    flex-direction: column !important;
+    gap: 2px !important;
+    padding: 6px 4px;
+  }
+  .mobile-bar-item span {
+    font-size: 0.55rem;
+  }
+}
