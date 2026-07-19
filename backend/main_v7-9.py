@@ -124,7 +124,15 @@ from pydantic import BaseModel, Field
 from video_pipeline.config1 import config
 from video_pipeline.core.stream_manager import StreamManager
 from video_pipeline.detection.ocr import OCRExtractor
-from video_pipeline.reasoning.phi3_engine import Phi3Reasoner as LlamaReasoner
+# PHI3_BACKEND=local  -> load Phi-3-mini on a local CUDA GPU (phi3_engine.py)
+# PHI3_BACKEND=api     -> call Phi-3-mini via the Hugging Face Inference API
+#                         (phi3_engine_api.py) — use this for CPU-only deploys.
+#
+# set PHI3_BACKEND=local when running on your own GPU machine.
+if os.environ.get("PHI3_BACKEND", "api").lower() == "local":
+    from video_pipeline.reasoning.phi3_engine import Phi3Reasoner as LlamaReasoner
+else:
+    from video_pipeline.reasoning.phi3_engine_api import Phi3Reasoner as LlamaReasoner
 from video_pipeline.utils.device import setup_device
 from video_pipeline.utils.logger import get_logger
 
