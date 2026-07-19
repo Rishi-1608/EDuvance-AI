@@ -367,6 +367,40 @@ def get_db_media_states(user_id: str) -> Dict[str, Dict[str, Any]]:
             .all()
         )
 
+        if not all_media:
+            return result
+
+        media_ids = [m.id for m in all_media]
+
+        # ── Batched flashcard / quiz / note lookups ────────────────────────
+        # 3 queries total for ALL media items, instead of 3 queries PER item
+        # (was the dominant source of latency — 50+ round trips to Neon on
+        # a single /status or /dashboard/stats call with ~14 media rows).
+        fc_counts = dict(
+            db.query(Flashcard.media_id, func.count(Flashcard.id))
+              .filter(Flashcard.media_id.in_(media_ids))
+              .group_by(Flashcard.media_id)
+              .all()
+        )
+        qz_counts = dict(
+            db.query(QuizQuestion.media_id, func.count(QuizQuestion.id))
+              .filter(QuizQuestion.media_id.in_(media_ids))
+              .group_by(QuizQuestion.media_id)
+              .all()
+        )
+        note_media_ids = {
+            mid for (mid,) in
+            db.query(Note.media_id).filter(Note.media_id.in_(media_ids)).distinct().all()
+        }
+
+        # ── Batched Video / Image / Document lookups (3 queries, not N) ───
+        videos_by_media = {v.media_id: v for v in db.query(Video).filter(Video.media_id.in_(media_ids)).all()}
+        images_by_media = {}
+        for img in db.query(Image).filter(Image.media_id.in_(media_ids)).all():
+            # first image per media_id wins, matching the original .first() behaviour
+            images_by_media.setdefault(img.media_id, img)
+        docs_by_media = {d.media_id: d for d in db.query(Document).filter(Document.media_id.in_(media_ids)).all()}
+
         for m in all_media:
             stem = m.batch_stem or Path(m.storage_path or "").stem
             if not stem:
@@ -377,9 +411,9 @@ def get_db_media_states(user_id: str) -> Dict[str, Dict[str, Any]]:
             if stem in result:
                 continue
 
-            fc_count = db.query(Flashcard).filter(Flashcard.media_id == m.id).count()
-            qz_count = db.query(QuizQuestion).filter(QuizQuestion.media_id == m.id).count()
-            has_notes = db.query(Note).filter(Note.media_id == m.id).count() > 0
+            fc_count  = fc_counts.get(m.id, 0)
+            qz_count  = qz_counts.get(m.id, 0)
+            has_notes = m.id in note_media_ids
 
             # Derive lecture title from extension table
             lecture_title = None
@@ -387,16 +421,8 @@ def get_db_media_states(user_id: str) -> Dict[str, Dict[str, Any]]:
             pdf_ready     = False
             graph_ready   = False
 
-            if m.media_type == "video":
-                v = db.query(Video).filter(Video.media_id == m.id).first()
-                if v:
-                    lecture_title = v.lecture_title
-                    subject_area  = v.subject_area
-                    pdf_ready     = bool(v.pdf_report_path)
-                    graph_ready   = bool(v.knowledge_graph_path)
-
-            elif m.media_type == "live":
-                v = db.query(Video).filter(Video.media_id == m.id).first()
+            if m.media_type in ("video", "live"):
+                v = videos_by_media.get(m.id)
                 if v:
                     lecture_title = v.lecture_title
                     subject_area  = v.subject_area
@@ -404,14 +430,14 @@ def get_db_media_states(user_id: str) -> Dict[str, Dict[str, Any]]:
                     graph_ready   = bool(v.knowledge_graph_path)
 
             elif m.media_type == "image":
-                img = db.query(Image).filter(Image.media_id == m.id).first()
+                img = images_by_media.get(m.id)
                 if img:
                     lecture_title = img.lecture_title
                     subject_area  = img.subject_area
                     pdf_ready     = bool(img.pdf_report_path)
 
             elif m.media_type == "document":
-                d = db.query(Document).filter(Document.media_id == m.id).first()
+                d = docs_by_media.get(m.id)
                 if d:
                     lecture_title = d.lecture_title
                     subject_area  = d.subject_area

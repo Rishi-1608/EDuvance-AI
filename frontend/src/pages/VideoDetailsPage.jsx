@@ -5,7 +5,7 @@ import { getStudyNotes, getPdfUrl, downloadPdf, generateFlashcardsAndQuiz } from
 import './VideoDetailsPage.css';
 
 export function VideoDetailsPage({ stem, onBack, onTabChange }) {
-  const { status, refetch } = useStatus(2000);  // Poll every 2 seconds (faster updates)
+  const { status, refetch } = useStatus(5000);
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [msg, setMsg] = useState(null);

@@ -28,7 +28,7 @@ export default function App() {
   const [history, setHistory] = useState(['home']);
   const [selectedStem, setSelectedStem] = useState('');
   const [isUploading, setIsUploading] = useState(false);
-  const { status } = useStatus(4000, !!user);
+  const { status } = useStatus(8000, !!user);
 
   useEffect(() => {
     // Check if we have a token and fetch user info
@@ -136,5 +136,3 @@ export default function App() {
   );
 
 }
-
-

@@ -15,7 +15,7 @@ import { stopPipeline, clearResults } from '@/lib/api';
 import './DashboardPage.css';
 
 export function DashboardPage({ onTabChange, isUploading }) {
-  const { status, error, refetch } = useStatus(1500); // Poll faster during processing
+  const { status, error, refetch } = useStatus(5000);
   const [logs, setLogs] = useState([]);
   const [fakeProgress, setFakeProgress] = useState(0);
   const lastStepRef = useRef(null);

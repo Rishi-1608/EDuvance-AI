@@ -3286,7 +3286,7 @@ async def clear_results(
 # ──────────────────────────────────────────────────────────────────────────────
 
 @app.get("/status", summary="Pipeline progress and per-video readiness", tags=["Status"])
-async def status(
+def status(
     current_user: User = Depends(auth.get_current_user),
 ) -> JSONResponse:
     # In-memory results filtered to current user
@@ -3905,7 +3905,7 @@ async def delete_lecture(
 # ──────────────────────────────────────────────────────────────────────────────
 
 @app.get("/dashboard/stats", summary="Per-user lecture statistics from DB", tags=["Dashboard"])
-async def dashboard_stats(
+def dashboard_stats(
     current_user: User = Depends(auth.get_current_user),
 ) -> JSONResponse:
     now_ts = time.time()
