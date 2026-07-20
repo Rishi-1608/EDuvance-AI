@@ -157,13 +157,29 @@ from academic_system.prompts1 import (
     prompt_cards_from_notes,
 )
 from academic_system.pdf_generator import generate_pdf_report
-from academic_system.whisper_transcriber1 import (
-    extract_audio, transcribe, convert_to_wav,
-    release_models as release_whisper_models,   # v3.2.2: free VRAM before Phi-3
-    WHISPER_AVAILABLE,
-    FASTER_WHISPER_AVAILABLE,   # v3.2.0: faster-whisper backend flag
-    OPENAI_WHISPER_AVAILABLE,   # v3.2.0: openai-whisper fallback flag
-)
+# WHISPER_BACKEND=local (default) -> load faster-whisper/openai-whisper locally
+# WHISPER_BACKEND=api              -> transcribe via the HF Inference API
+#                                     (whisper_transcriber_api.py) — use this
+#                                     on CPU-only / low-RAM deploys to avoid
+#                                     the memory hit of loading Whisper
+#                                     alongside EasyOCR + sentence-transformers.
+if os.environ.get("WHISPER_BACKEND", "local").lower() == "api":
+    from academic_system.whisper_transcriber_api import (
+        transcribe,
+        WHISPER_AVAILABLE,
+        FASTER_WHISPER_AVAILABLE,
+        OPENAI_WHISPER_AVAILABLE,
+        release_models as release_whisper_models,
+    )
+    from academic_system.whisper_transcriber1 import extract_audio, convert_to_wav
+else:
+    from academic_system.whisper_transcriber1 import (
+        extract_audio, transcribe, convert_to_wav,
+        release_models as release_whisper_models,   # v3.2.2: free VRAM before Phi-3
+        WHISPER_AVAILABLE,
+        FASTER_WHISPER_AVAILABLE,   # v3.2.0: faster-whisper backend flag
+        OPENAI_WHISPER_AVAILABLE,   # v3.2.0: openai-whisper fallback flag
+    )
 from academic_system.pdf_pipeline import (
     run_pdf_pipeline,
     init_pdf_pipeline_singletons,

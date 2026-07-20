@@ -26,7 +26,9 @@ v4.0.1 fixes (matches config.py v3.0.3)
 """
 from __future__ import annotations
 
+import base64
 import logging
+import os
 from typing import Any, Dict, List, Optional
 
 import cv2
@@ -39,7 +41,7 @@ logger = logging.getLogger(__name__)
 try:
     import easyocr
     EASYOCR_AVAILABLE = True
-    logger.info("[OCR] EasyOCR available ✓")
+    logger.info("[OCR] EasyOCR available [OK]")
 except ImportError:
     EASYOCR_AVAILABLE = False
     logger.warning("[OCR] EasyOCR not installed. Will try Tesseract.")
@@ -48,7 +50,7 @@ try:
     import pytesseract
     from PIL import Image as PILImage
     TESSERACT_AVAILABLE = True
-    logger.info("[OCR] Tesseract (pytesseract) available ✓")
+    logger.info("[OCR] Tesseract (pytesseract) available [OK]")
 except ImportError:
     TESSERACT_AVAILABLE = False
     logger.warning("[OCR] pytesseract not installed.")
@@ -116,6 +118,18 @@ class OCRExtractor:
         self.languages = languages or ["en"]
         self._backend  = "none"
         self._reader: Optional[Any] = None
+        self._hf_client: Optional[Any] = None
+
+        # OCR_BACKEND=api  -> extract text via a vision model on the HF
+        #                     Inference API instead of loading EasyOCR
+        #                     locally. Use this on CPU-only / low-RAM hosts
+        #                     (e.g. Render free/starter) to avoid the memory
+        #                     hit of holding EasyOCR + Whisper + the
+        #                     sentence-transformer model in one process.
+        # OCR_BACKEND=local (default) -> existing EasyOCR/Tesseract behaviour.
+        if os.environ.get("OCR_BACKEND", "local").lower() == "api":
+            self._init_api_backend()
+            return
 
         logger.info(f"[OCR] Loading EasyOCR reader (langs={self.languages}, gpu={self.use_gpu}) …")
 
@@ -126,6 +140,29 @@ class OCRExtractor:
             logger.info("[OCR] Using Tesseract backend.")
         else:
             logger.error("[OCR] No OCR backend available.")
+
+    def _init_api_backend(self) -> None:
+        try:
+            from huggingface_hub import InferenceClient
+        except ImportError:
+            logger.error(
+                "[OCR/API] huggingface_hub not installed. Run: pip install huggingface_hub"
+            )
+            self._backend = "none"
+            return
+
+        hf_token = os.environ.get("HF_TOKEN")
+        if not hf_token:
+            logger.error(
+                "[OCR/API] HF_TOKEN environment variable not set — cannot use OCR_BACKEND=api."
+            )
+            self._backend = "none"
+            return
+
+        self._hf_model_id = os.environ.get("OCR_HF_MODEL_ID", "meta-llama/Llama-3.2-11B-Vision-Instruct")
+        self._hf_client = InferenceClient(model=self._hf_model_id, token=hf_token)
+        self._backend = "api"
+        logger.info(f"[OCR/API] Ready — using HF Inference API model '{self._hf_model_id}'.")
 
     def set_languages(self, languages: List[str]) -> None:
         if not EASYOCR_AVAILABLE:
@@ -140,6 +177,11 @@ class OCRExtractor:
         """Run OCR on a single BGR frame."""
         if self._backend == "none":
             return []
+        if self._backend == "api":
+            # Send the original color frame — vision models generally do
+            # better OCR on color images than the grayscale-preprocessed
+            # version used for EasyOCR/Tesseract.
+            return self._api_ocr(frame)
         gray = _preprocess_frame(frame)
         try:
             if self._backend == "easyocr":
@@ -201,7 +243,7 @@ class OCRExtractor:
                 OCRExtractor._reader_cache[key] = easyocr.Reader(
                     languages, gpu=self.use_gpu, verbose=False,
                 )
-                logger.info("[OCR] EasyOCR reader loaded ✓")
+                logger.info("[OCR] EasyOCR reader loaded [OK]")
             except Exception as exc:
                 logger.error(f"[OCR] EasyOCR reader init failed: {exc}")
                 if TESSERACT_AVAILABLE:
@@ -234,3 +276,46 @@ class OCRExtractor:
                 results.append({"text": text, "confidence": round(conf, 4),
                                  "bbox": [[x, y], [x+w, y], [x+w, y+h], [x, y+h]]})
         return results
+
+    def _api_ocr(self, frame: np.ndarray) -> List[Dict[str, Any]]:
+        """
+        Extract text from a frame via a vision-capable model on the HF
+        Inference API. Returns the same [{"text", "confidence", "bbox"}]
+        shape as the local backends so ocr_to_text()/results_to_text()
+        downstream need no changes — bbox is always None here since a
+        chat-style vision model returns free text, not per-region boxes
+        (nothing downstream in this pipeline actually uses bbox — it's
+        flattened to plain text immediately after extraction).
+        """
+        if self._hf_client is None:
+            return []
+        try:
+            ok, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
+            if not ok:
+                logger.warning("[OCR/API] Failed to encode frame as JPEG.")
+                return []
+            b64_image = base64.b64encode(buf.tobytes()).decode("utf-8")
+            data_uri = f"data:image/jpeg;base64,{b64_image}"
+
+            response = self._hf_client.chat_completion(
+                messages=[{
+                    "role": "user",
+                    "content": [
+                        {"type": "image_url", "image_url": {"url": data_uri}},
+                        {"type": "text", "text": (
+                            "Transcribe all visible text in this image exactly as written. "
+                            "Only output the transcribed text, nothing else. "
+                            "If there is no readable text, output nothing."
+                        )},
+                    ],
+                }],
+                max_tokens=512,
+            )
+            text = (response.choices[0].message.content or "").strip()
+            if not text:
+                return []
+            return [{"text": text, "confidence": 1.0, "bbox": None}]
+
+        except Exception as exc:
+            logger.warning(f"[OCR/API] Extraction failed: {exc}")
+            return []
